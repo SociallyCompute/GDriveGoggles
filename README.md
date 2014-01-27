@@ -1,6 +1,6 @@
 GDriveGoggles
 ==============
-A Python 3.3 GDrive meta-data scraper. 
+A Python 3.3 GDrive metadata scraper. 
 
 Dependencies
 ------------
