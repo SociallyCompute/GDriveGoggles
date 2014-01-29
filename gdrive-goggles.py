@@ -4,7 +4,6 @@ from mysql.connector import errorcode
 from requests import HTTPError
 from requests import ConnectionError
 from requests_oauthlib import OAuth2Session, TokenUpdated
-import pprint
 
 # Print strings in verbose mode
 def verbose(info) :
@@ -38,7 +37,7 @@ def connect() :
 def getJobs(conn) :
 	cursor = conn.cursor() 
 
-	query = ("SELECT job_id, zombie_head, state, from_change_id, description, \
+	query = ("SELECT job_id, zombie_head, state, from_change_id, folder_id, description, \
 				oauth.oauth_id, client_id, client_secret, access_token, refresh_token \
 			FROM job, oauth \
 			WHERE job.state > 0 AND job.oauth_id = oauth.oauth_id AND zombie_head = %s \
@@ -49,32 +48,27 @@ def getJobs(conn) :
 	return cursor
 
 # Get all files to be watched by a job
-def getFilesForJob(conn, job_id) :
-	cursor = conn.cursor() 
-
-	query = ("SELECT file_id \
-			FROM job_files \
-			WHERE job_id = %s")
-
-	values = [
-		job_id
-	]
-
+def getAndUpdateFilesForJob(conn, client, folder_id) :
 	files = set()
-	try :
-		cursor.execute(query, values)
 
-		for (file_id,) in cursor :
+	queue = collections.deque()
+	queue.append({'id':folder_id})
+	while len(queue) > 0:
+		next = queue.popleft();
+		file_id = next['id']
+		file_metadata = getFile(client, next['id'])
+
+		# Update file metadata
+		updateFile(conn, file_metadata)
+		updateFileOwners(conn, file_metadata)
+
+		if file_metadata['mimeType'] == 'application/vnd.google-apps.folder':
+			children = getChildren(client, file_id)
+			queue.extendleft(children['items'])
+		else :
 			files.add(file_id)
-		return files
 
-	except sql.Error as err :
-		verbose(">>>> Warning: Could not fetch job files: " + str(err))
-		verbose("     Query: " + cursor.statement)
-		return set()
-
-	finally:
-		cursor.close()
+	return files
 
 # Get the access token and refresh token for the 
 def getInitialAuthorization(client_id, client_secret) :
@@ -150,6 +144,18 @@ def getChanges(client, start_change_id) :
 	changes = client.get('https://www.googleapis.com/drive/v2/changes?maxResults={}&fields={}&startChangeId={}'.format(max_results, ','.join(fields), start_change_id))
 
 	return changes.json()
+
+# Get children metadata
+def getChildren(client, folder_id) :
+	max_results = 1000
+
+	fields = [
+		'items/id'
+	]
+
+	children = client.get('https://www.googleapis.com/drive/v2/files/{}/children?maxResults={}&fields={}'.format(folder_id, max_results, ','.join(fields)))
+
+	return children.json()
 
 # Get file metadata
 def getFile(client, file_id) :
@@ -273,7 +279,7 @@ def addRevisions(conn, file_id, revisions) :
 			revision['id'], 
 			revision['mimeType'], 
 			revision['modifiedDate'], 
-			revision['lastModifyingUserName'], 
+			revision['lastModifyingUserName'] if "lastModifyingUserName" in revision else "anonymous", 
 			revision['md5Checksum'] if "md5Checksum" in revision else "", 
 			revision['fileSize'] if "fileSize" in revision else -1
 		]
@@ -425,7 +431,7 @@ if __name__ == '__main__' :
 				+ " value matches {}, and the 'state' value is greater than 0.\n".format(args.head))
 
 		# Iterate over all of the jobs found
-		for (job_id, zombie_head, state, from_change_id, description, oauth_id, client_id, client_secret, access_token, refresh_token) in jobs :
+		for (job_id, zombie_head, state, from_change_id, folder_id, description, oauth_id, client_id, client_secret, access_token, refresh_token) in jobs :
 
 			# Throttle the job frequency
 			if (epoch_min % state != 0) :
@@ -447,7 +453,7 @@ if __name__ == '__main__' :
 				client = getRefreshedAuthorization(client_id, client_secret, access_token, refresh_token)
 			
 			# Get a set of files we care about
-			files = getFilesForJob(conn, job_id)
+			files = getAndUpdateFilesForJob(conn, client, folder_id)
 
 			# Get a list of all changes since we last looked
 			changes = getChanges(client, from_change_id)
@@ -456,11 +462,6 @@ if __name__ == '__main__' :
 			for change in changes['items'] :
 				file_id = change['fileId']
 				if file_id in files :
-					# Update file metadata
-					file_metadata = getFile(client, file_id)
-					updateFile(conn, file_metadata)
-					updateFileOwners(conn, file_metadata)
-
 					# Get all of the revisions for a file that has changed
 					revisions = getRevisions(client, file_id)
 					addRevisions(conn, file_id, revisions)

@@ -22,21 +22,12 @@ CREATE TABLE `job` (
   `job_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `state` int(1) NOT NULL DEFAULT 0,
   `zombie_head` int(10) DEFAULT 1,
+  `folder_id` varchar(255),
   `description` varchar(255) DEFAULT 'I am a lazy piece of shit and I did not enter a description',
   `from_change_id` bigint DEFAULT 1,
   `last_run` datetime DEFAULT NULL,
   `oauth_id` int(10) unsigned NOT NULL,
   PRIMARY KEY (`job_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2511 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT;
-
--- ----------------------------
---  Table structure for `job`
--- ----------------------------
-DROP TABLE IF EXISTS `job_files`;
-CREATE TABLE `job_files` (
-  `job_id` int(10) unsigned NOT NULL,
-  `file_id` varchar(255) NOT NULL,
-  PRIMARY KEY (`job_id`,`file_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2511 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT;
 
 -- ----------------------------
