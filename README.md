@@ -35,6 +35,26 @@ pip install mysql-connector-python requests requests-oauthlib
 4. Set database config options in config/settings.cfg
 5. Add your OAuth credentials to the oauth table
 	1. Get OAuth credentials by setting up an Application at Googles's Developers site (https://cloud.google.com/console)
+	2. Select the App in your google developers console
+	3. Choose "Credentials" under "APIs and auth"
+	4. Under "Oauth", push the red "CREATE NEW CLIENT ID" button
+	5. When Prompted, select "Other"
+	6. This will result in a "Client ID for Native Application" being created. 
+	7. Populate the "Client ID" and "Client Secret" in the GDriveGoggles oauth table
+	8. You then need to go to the command line and follow these steps ... 
+		a. python3 ./gdrive-goggles.py 1 
+		b. (the result, below, requires you to copy the URL into a browser)
+			vvvvv Start: 2014-02-01 17:58:16
+			Head: 1
+			Delay: 0
+			Connecting to database...
+			Connected
+			+++++ Job ID:2511	Description:test	OAuth ID:2511
+			Please go to https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=xxx uri=xxx.readonly&state=xxxe&access_type=offline and authorize access.
+			Enter the URL of the page Google redirects you to: 
+		c. Somewhat oddly, the browser then redirects you to a "localhost" based URL.  An empty, error page.  This is actually correct.  Just copy the URL and past it back into the terminal response.  From this point forward, this OAUTH will work.
+		c.  You will need to follow these steps for each OAUTH you create
+ 
 
 Usage
 -----
