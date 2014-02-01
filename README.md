@@ -41,7 +41,11 @@ pip install mysql-connector-python requests requests-oauthlib
 	5. When Prompted, select "Other"
 	6. This will result in a "Client ID for Native Application" being created. 
 	7. Populate the "Client ID" and "Client Secret" in the GDriveGoggles oauth table
-	8. You then need to go to the command line and follow these steps ... 
+	8. Create at least one job in the "job table"
+		a. for the "folder id", use the hash at the end of the URL when you within a folder from your browser
+		b. You also need to enter a state and Zombie Head.  The rest of the fields will be updated when you run the python script in the next step
+		c. Its a good idea to enter a description
+	9. You then need to go to the command line and follow these steps ... 
 		a. python3 ./gdrive-goggles.py 1 
 		b. (the result, below, requires you to copy the URL into a browser)
 			vvvvv Start: 2014-02-01 17:58:16
@@ -54,7 +58,9 @@ pip install mysql-connector-python requests requests-oauthlib
 			Enter the URL of the page Google redirects you to: 
 		c. Somewhat oddly, the browser then redirects you to a "localhost" based URL.  An empty, error page.  This is actually correct.  Just copy the URL and past it back into the terminal response.  From this point forward, this OAUTH will work.
 		c.  You will need to follow these steps for each OAUTH you create
- 
+ 	10. If you get errors when running the script, one troubleshooting step that helped was to update the libraries.  This is possibly necessary if the required libraries were installed earlier ... 
+ 		a. pip install --update mysql-connector-python requests requests-oauthlib
+ 		b. This step is likely if you are already running RedditGoggles or TwitterGoggles
 
 Usage
 -----
