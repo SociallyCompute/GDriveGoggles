@@ -259,7 +259,8 @@ def getRevisions(client, file_id) :
 		'items/modifiedDate', 
 		'items/lastModifyingUserName', 
 		'items/md5Checksum', 
-		'items/fileSize'
+		'items/fileSize',
+		'items/exportLinks'
 	]
 
 	revisions = client.get('https://www.googleapis.com/drive/v2/files/{}/revisions?fields={}'.format(file_id, ','.join(fields)))
@@ -267,21 +268,36 @@ def getRevisions(client, file_id) :
 	return revisions.json()
 
 # Add all revisions to the DB
-def addRevisions(conn, file_id, revisions) :
+def addRevisions(conn, client, file_id, revisions) :
 	cursor = conn.cursor()
 
-	query = "INSERT INTO revision (file_id, revision_id, mime_type, modified_date, last_modifying_user_name, md5, file_size) " \
-		"VALUES(%s, %s, %s, %s, %s, %s, %s)  ON DUPLICATE KEY UPDATE revision_id=revision_id"
+	query = "INSERT INTO revision (file_id, revision_id, mime_type, modified_date, last_modifying_user_name, md5, file_size, file_contents, file_contents_plaintext) " \
+		"VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)  ON DUPLICATE KEY UPDATE revision_id=revision_id"
 
 	for revision in revisions['items']:
+		file_contents = None
+		file_contents_plaintext = None
+		
+		mime_type = revision['mimeType']
+		if (mime_type == 'application/vnd.google-apps.document') :
+			file_contents_plaintext = client.get(revision['exportLinks']['text/plain']).text
+		elif (mime_type == 'application/vnd.google-apps.spreadsheet') :
+			file_contents = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']).content
+		elif (mime_type == 'application/vnd.google-apps.presentation') :
+			file_contents = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.presentationml.presentation']).content
+		elif (mime_type == 'application/vnd.google-apps.drawing') :
+			file_contents = client.get(revision['exportLinks']['image/png']).content
+
 		values = [
 			file_id, 
 			revision['id'], 
-			revision['mimeType'], 
+			mime_type, 
 			revision['modifiedDate'], 
 			revision['lastModifyingUserName'] if "lastModifyingUserName" in revision else "anonymous", 
 			revision['md5Checksum'] if "md5Checksum" in revision else "", 
-			revision['fileSize'] if "fileSize" in revision else -1
+			revision['fileSize'] if "fileSize" in revision else -1,
+			file_contents,
+			file_contents_plaintext
 		]
 
 		try :
@@ -464,7 +480,7 @@ if __name__ == '__main__' :
 				if file_id in files :
 					# Get all of the revisions for a file that has changed
 					revisions = getRevisions(client, file_id)
-					addRevisions(conn, file_id, revisions)
+					addRevisions(conn, client, file_id, revisions)
 
 					# Update comments
 					comments = getComments(client, file_id)

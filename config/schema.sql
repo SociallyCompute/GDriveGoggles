@@ -42,6 +42,8 @@ CREATE TABLE `revision` (
   `last_modifying_user_name` varchar(255) NOT NULL,
   `md5` varchar(255),
   `file_size` bigint,
+  `file_contents` blob,
+  `file_contents_plaintext` text, 
   PRIMARY KEY (`file_id`,`revision_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2511 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT;
 
