@@ -1,4 +1,4 @@
-import argparse, collections, configparser, json, math, mysql.connector as sql, os, requests, sys, time
+import argparse, collections, configparser, json, math, mysql.connector as sql, os, requests, sys, time, difflib
 from datetime import datetime
 from mysql.connector import errorcode
 from requests import HTTPError
@@ -263,41 +263,57 @@ def getRevisions(client, file_id) :
 		'items/exportLinks'
 	]
 
-	revisions = client.get('https://www.googleapis.com/drive/v2/files/{}/revisions?fields={}'.format(file_id, ','.join(fields)))
+	revisions = client.get('https://www.googleapis.com/drive/v2/files/{}/revisions?fields={}'.format(file_id, ','.join(fields))).json()
 
-	return revisions.json()
+	file_contents = None
+	file_contents_plaintext = None
+
+	for revision in revisions['items']:
+		revision['file_contents'] = None
+		revision['file_contents_plaintext'] = None
+	
+		mime_type = revision['mimeType']
+		if (mime_type == 'application/vnd.google-apps.document') :
+			revision['file_contents_plaintext'] = client.get(revision['exportLinks']['text/plain']).text
+		elif (mime_type == 'application/vnd.google-apps.spreadsheet') :
+			revision['file_contents'] = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']).content
+		elif (mime_type == 'application/vnd.google-apps.presentation') :
+			revision['file_contents'] = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.presentationml.presentation']).content
+		elif (mime_type == 'application/vnd.google-apps.drawing') :
+			revision['file_contents'] = client.get(revision['exportLinks']['image/png']).content
+
+	return revisions
+
+# Populate revision diffs
+def populateRevisionDiffs(revisions) :
+	previous = ''
+	for revision in sorted(revisions['items'], key = lambda revision : int(revision['id']) ) :
+		if (revision['file_contents_plaintext'] is not None) :
+			current = revision['file_contents_plaintext']
+			revision['file_contents_plaintext_diff'] = ''.join(difflib.unified_diff(previous.splitlines(1), current.splitlines(1)))
+			previous = current
+		else :
+			revision['file_contents_plaintext_diff'] = None
 
 # Add all revisions to the DB
 def addRevisions(conn, client, file_id, revisions) :
 	cursor = conn.cursor()
 
-	query = "INSERT INTO revision (file_id, revision_id, mime_type, modified_date, last_modifying_user_name, md5, file_size, file_contents, file_contents_plaintext) " \
-		"VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)  ON DUPLICATE KEY UPDATE revision_id=revision_id"
+	query = "INSERT INTO revision (file_id, revision_id, mime_type, modified_date, last_modifying_user_name, md5, file_size, file_contents, file_contents_plaintext, file_contents_plaintext_diff) " \
+		"VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  ON DUPLICATE KEY UPDATE revision_id=revision_id"
 
 	for revision in revisions['items']:
-		file_contents = None
-		file_contents_plaintext = None
-		
-		mime_type = revision['mimeType']
-		if (mime_type == 'application/vnd.google-apps.document') :
-			file_contents_plaintext = client.get(revision['exportLinks']['text/plain']).text
-		elif (mime_type == 'application/vnd.google-apps.spreadsheet') :
-			file_contents = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']).content
-		elif (mime_type == 'application/vnd.google-apps.presentation') :
-			file_contents = client.get(revision['exportLinks']['application/vnd.openxmlformats-officedocument.presentationml.presentation']).content
-		elif (mime_type == 'application/vnd.google-apps.drawing') :
-			file_contents = client.get(revision['exportLinks']['image/png']).content
-
 		values = [
 			file_id, 
 			revision['id'], 
-			mime_type, 
+			revision['mimeType'], 
 			revision['modifiedDate'], 
 			revision['lastModifyingUserName'] if "lastModifyingUserName" in revision else "anonymous", 
 			revision['md5Checksum'] if "md5Checksum" in revision else "", 
 			revision['fileSize'] if "fileSize" in revision else -1,
-			file_contents,
-			file_contents_plaintext
+			revision['file_contents'],
+			revision['file_contents_plaintext'],
+			revision['file_contents_plaintext_diff']
 		]
 
 		try :
@@ -480,6 +496,7 @@ if __name__ == '__main__' :
 				if file_id in files :
 					# Get all of the revisions for a file that has changed
 					revisions = getRevisions(client, file_id)
+					populateRevisionDiffs(revisions)
 					addRevisions(conn, client, file_id, revisions)
 
 					# Update comments

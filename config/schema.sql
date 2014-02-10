@@ -44,6 +44,7 @@ CREATE TABLE `revision` (
   `file_size` bigint,
   `file_contents` blob,
   `file_contents_plaintext` text, 
+  `file_contents_plaintext_diff` text,
   PRIMARY KEY (`file_id`,`revision_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2511 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT;
 
